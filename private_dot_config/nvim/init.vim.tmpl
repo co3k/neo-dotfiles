@@ -1,0 +1,194 @@
+runtime! userautoload/init/*.vim
+runtime! userautoload/plugins/*.vim
+
+lua require('plugins')
+
+augroup packer_user_config
+  autocmd!
+  autocmd BufWritePost plugins.lua source <afile> | PackerCompile
+augroup end
+
+let g:copilot_node_command = "{{ .default_node }}"
+
+set tabstop=2
+set smartcase
+set ignorecase
+
+set updatetime=300
+autocmd CursorHold,CursorHoldI * lua require('nvim-lightbulb').update_lightbulb()
+
+lua << EOF
+require("mason").setup()
+require("mason-lspconfig").setup()
+local nvim_lsp = require('lspconfig')
+require("mason-lspconfig").setup_handlers { function (server)
+  local node_root_dir = nvim_lsp.util.root_pattern("package.json")
+  local is_node_repo = node_root_dir(vim.api.nvim_buf_get_name(0)) ~= nil
+
+  local deno_root_dir = nvim_lsp.util.root_pattern("deno.json")
+  local is_deno_repo = deno_root_dir(vim.api.nvim_buf_get_name(0)) ~= nil
+
+  local opts = {}
+  if server == "tsserver" then
+    if is_deno_repo then
+      return
+    end
+    opts.root_dir = node_root_dir
+  elseif server == "eslint" then
+    if is_deno_repo then
+      return
+    end
+    opts.root_dir = node_root_dir
+  elseif server == "denols" then
+    if is_node_repo then
+      return
+    end
+
+    opts.root_dir = nvim_lsp.util.root_pattern("deno.json", "deno.jsonc", "deps.ts", "import_map.json")
+    opts.init_options = {
+      lint = true,
+      unstable = true,
+      suggest = {
+	imports = {
+	  hosts = {
+	    ["https://deno.land"] = true,
+	    ["https://cdn.nest.land"] = true,
+	    ["https://crux.land"] = true
+	  }
+	}
+      }
+    }
+  end
+
+  local navic = require("nvim-navic")
+  opts.on_attach = function(client, bufnr)
+    navic.setup(client, bufnr)
+  end
+  opts.capabilities = require("cmp_nvim_lsp").default_capabilities()
+  nvim_lsp[server].setup(opts)
+end }
+
+local lspkind = require('lspkind')
+local cmp = require("cmp")
+cmp.setup({
+  snippet = {
+    expand = function(args)
+      vim.fn["vsnip#anonymous"](args.body)
+    end,
+  },
+  sources = {
+    { name = "nvim_lsp" },
+    { name = "buffer" },
+    { name = "path" },
+    { name = 'nvim_lsp_signature_help' },
+    { name = 'nvim_lsp_document_symbol' },
+    { name = 'copilot' },
+    { name = "git" },
+  },
+  mapping = cmp.mapping.preset.insert({
+    ["<C-p>"] = cmp.mapping.select_prev_item(),
+    ["<C-n>"] = cmp.mapping.select_next_item(),
+    ['<C-l>'] = cmp.mapping.complete(),
+    ['<C-e>'] = cmp.mapping.abort(),
+    ["<CR>"] = cmp.mapping.confirm { select = true },
+  }),
+  experimental = {
+    ghost_text = true,
+  },
+  formatting = {
+    format = lspkind.cmp_format({
+      mode = 'symbol_text',
+      maxwidth = 50,
+      before = function (entry, vim_item)
+        return vim_item
+      end
+    })
+  }
+})
+require'nvim-treesitter.configs'.setup {
+  auto_install = true,
+  highlight = {
+    enable = true,
+  },
+  yati = { enable = true },
+}
+
+vim.lsp.handlers["textDocument/publishDiagnostics"] = vim.lsp.with(
+  vim.lsp.diagnostic.on_publish_diagnostics, {
+    underline = true,
+    show_diagnostic_autocmds = { 'InsertLeave', 'TextChanged' },
+    virtual_text = false,
+  }
+)
+
+local signs = { Error = " ", Warn = " ", Hint = " ", Info = " " }
+for type, icon in pairs(signs) do
+	local hl = "DiagnosticSign" .. type
+	vim.fn.sign_define(hl, { text = icon, texthl = hl, numhl = hl })
+end
+
+vim.o.timeoutlen = 300
+require 'key-menu'.set('n', '<Space>')
+require 'key-menu'.set('n', 'g')
+
+vim.keymap.set('n', '<Space>l', function() require 'key-menu'.open_window('<Space>l') end, {desc='LSP'})
+vim.keymap.set('n', '<Space>t', function() require 'key-menu'.open_window('<Space>t') end, {desc='Telescope'})
+vim.keymap.set('n', '<Space>tf', function() require 'key-menu'.open_window('<Space>tf') end, {desc='Find Files'})
+vim.keymap.set('n', '<Space>tg', function() require 'key-menu'.open_window('<Space>tg') end, {desc='Git'})
+vim.keymap.set('n', '<Space>tgh', function() require 'key-menu'.open_window('<Space>tgh') end, {desc='GitHub'})
+
+vim.api.nvim_set_keymap('n', 'j', '<Plug>(faster_move_j)', {noremap=false, silent=true})
+vim.api.nvim_set_keymap('n', 'k', '<Plug>(faster_move_k)', {noremap=false, silent=true})
+
+require('telescope').load_extension('gh')
+
+local neogit = require('neogit')
+neogit.setup {
+  integrations = {
+    diffview = true
+  },
+}
+vim.opt.termguicolors = true
+require('flare').setup{
+  x_threshold = 1,
+  y_threshold = 1,
+  expanse = 20,
+}
+EOF
+
+nnoremap <silent> <c-]>     <cmd>lua vim.lsp.buf.definition()<CR>
+nnoremap <silent> [[ <cmd>Lspsaga diagnostic_jump_next<CR>
+nnoremap <silent> ]] <cmd>Lspsaga diagnostic_jump_next<CR>
+nnoremap <silent> ga  <cmd>CodeActionMenu<CR>
+nnoremap <silent> gq  <cmd>TroubleToggle<CR>
+
+nnoremap <Space>lh <cmd>lua require'lspsaga.provider'.lsp_finder()<CR>
+nnoremap <Space>la <cmd>lua require('lspsaga.codeaction').code_action()<CR>
+vnoremap <Space>la :<C-U>lua require('lspsaga.codeaction').range_code_action()<CR>
+nnoremap <Space>lK <cmd>lua require('lspsaga.hover').render_hover_doc()<CR>
+nnoremap <Space>ls <cmd>lua require('lspsaga.signaturehelp').signature_help()<CR>
+nnoremap <Space>lr <cmd>lua require('lspsaga.rename').rename()<CR>
+nnoremap <Space>ld <cmd>lua require'lspsaga.provider'.preview_definition()<CR>
+
+nnoremap <Space>tff <cmd>Telescope find_files<cr>
+nnoremap <Space>tfl <cmd>Telescope live_grep<cr>
+nnoremap <Space>tfg <cmd>Telescope git_files<cr>
+nnoremap <Space>tfs <cmd>Telescope grep_string<cr>
+nnoremap <Space>tghi <cmd>Telescope gh issues<cr>
+nnoremap <Space>tghp <cmd>Telescope gh pull_request<cr>
+nnoremap <Space>tghg <cmd>Telescope gh gist<cr>
+nnoremap <Space>tghr <cmd>Telescope gh run<cr>
+nnoremap <Space>tgs <cmd>Telescope git_status<cr>
+nnoremap <Space>tgb <cmd>Telescope git_branches<cr>
+nnoremap <Space>tb <cmd>Telescope buffers<cr>
+nnoremap <Space>th <cmd>Telescope help_tags<cr>
+nnoremap <Space>th <cmd>Telescope help_tags<cr>
+nnoremap <Space>tq <cmd>Telescope quickfix<cr>
+nnoremap <Space>tq <cmd>Telescope quickfix<cr>
+nnoremap <Space>tt <cmd>Telescope treesitter<cr>
+
+set cursorline
+colorscheme terafox
+
+autocmd TextYankPost * if v:event.operator is 'y' && v:event.regname is '' | execute 'OSCYankReg "' | endif
+autocmd TermOpen * setlocal nonumber norelativenumber
