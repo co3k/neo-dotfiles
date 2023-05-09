@@ -19,15 +19,8 @@ config.ssh_domains = {
   },
 }
 
-config.unix_domains = {
-  {
-    name = 'wsl',
-    serve_command = { 'wsl', 'wezterm-mux-server', '--daemonize' },
-  },
-}
-
 if wezterm.target_triple == "x86_64-pc-windows-msvc" then
-  config.default_gui_startup_args = { 'connect', 'wsl' }
+  config.default_gui_startup_args = { 'connect', 'ebitea-1' }
 end
 
 return config
