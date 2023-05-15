@@ -1,4 +1,5 @@
 local wezterm = require 'wezterm'
+local act = wezterm.action
 
 local config = {}
 
@@ -17,6 +18,11 @@ config.ssh_domains = {
     remote_address = 'ebitea-1',
     username = 'co3k',
   },
+}
+
+config.keys = {
+  { key = 'V', mods = 'CTRL', action = act.PasteFrom 'Clipboard'},
+  { key = 'C', mods = 'CTRL', action = act.CopyTo 'Clipboard' },
 }
 
 if wezterm.target_triple == "x86_64-pc-windows-msvc" then
